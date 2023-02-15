@@ -1,14 +1,11 @@
 import {Component, OnInit} from '@angular/core';
 import * as L from 'leaflet';
 import {CanvasLayer} from 'leaflet-canvas-layer';
-import GeoRasterLayer, {GeoRaster, GeoRasterLayerOptions} from 'georaster-layer-for-leaflet';
+import GeoRasterLayer, {GeoRaster} from 'georaster-layer-for-leaflet';
 import parseGeoRaster from 'georaster';
-import {LatLngBounds, MapOptions} from "leaflet";
-import isUTM from "utm-utils/src/isUTM.js";
-import getProjString from "utm-utils/src/getProjString.js";
 import proj4 from 'proj4';
 import epsg_codes from 'epsg-index/all.json';
-import {BehaviorSubject, forkJoin, Observable, Subject} from "rxjs";
+import {BehaviorSubject} from "rxjs";
 import {getBordersFromCorners, toImageData} from "./image.util";
 import {combineLatest} from "rxjs";
 
@@ -21,14 +18,6 @@ export class AppComponent implements OnInit {
   readonly MAX_ZOOM = 20
   name = 'Angular';
   map: any;
-  options: MapOptions = {
-    maxBounds: new LatLngBounds([
-      [-90, -180],
-      [90, 180],
-    ]),
-    zoomControl: false,
-    minZoom: 1,
-  };
 
   // geotiffCanvas$ = new BehaviorSubject<HTMLCanvasElement>(null);
   geotiffData$ = new BehaviorSubject<[HTMLCanvasElement, { x: number; y: number }]>(null);
@@ -43,7 +32,7 @@ export class AppComponent implements OnInit {
       maxZoom: this.MAX_ZOOM
     }).addTo(this.map);
 
-    const createLayer = async (geotiffData$) => {
+    const createLayer = async () => {
       const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
 
       const response = await fetch(url);
@@ -60,7 +49,7 @@ export class AppComponent implements OnInit {
       });
 
       const imageBounds = imageryLayer.getBounds();
-      // this.map.fitBounds(imageBounds);
+      this.map.fitBounds(imageBounds);
       this.renderCanvas(georaster, this.calcCorners(this.map, imageryLayer, this.MAX_ZOOM));
 
       this.canvasDraw.prototype = new CanvasLayer();
@@ -68,7 +57,7 @@ export class AppComponent implements OnInit {
       this.map.addLayer(new this.canvasDraw(imageryLayer, this.renderCanvas, this.geotiffData$, this.calcCorners, this.map));
     };
 
-    createLayer(this.geotiffData$);
+    createLayer().then();
 
     combineLatest([this.geotiffData$, this.georaster$]).subscribe((results) => {
       const canvas = results[0]?.[0];
@@ -82,70 +71,31 @@ export class AppComponent implements OnInit {
   }
 
   canvasDraw = function (imageryLayer, renderFunction, geotiffData$, calcCorners, map) {
-    this.onLayerDidMount = function () {
-      // -- prepare custom drawing
-    };
-    this.onLayerWillUnmount = function () {
-      // -- custom cleanup
-    };
-    this.setData = function (data) {
-      // -- custom data set
-      this.needRedraw(); // -- call to drawLayer
+    this.setData = function () {
+      this.needRedraw();
     };
     this.onDrawLayer = function (viewInfo) {
       const canvas = viewInfo.canvas;
-      const ctx = canvas.getContext("2d");
-
       const corners = calcCorners(map, imageryLayer);
 
       if (this.map.getZoom() >= 12) {
-        // ctx.beginPath();
-        //
-        // ctx.moveTo(xNW, yNW);
-        // ctx.lineTo(xNE, yNE);
-        // ctx.lineTo(xSE, ySE);
-        // ctx.lineTo(xSW, ySW);
-        // ctx.lineTo(xNW, yNW);
-        //
-        // ctx.fill();
-
         geotiffData$.next([canvas, corners]);
-
-        // if (geotiffCanvas$.getValue()) {
-        //   ctx.putImageData(geotiffCanvas$.getValue(), Math.min(corners[0].x, corners[3].x), Math.min(corners[0].y, corners[1].y), 0, 0, Math.max(corners[1].x, corners[2].x), Math.max(corners[2].y, corners[3].y));
-        // } else {
-        //   renderFunction(imageryLayer.georasters[0], corners, canvas, geotiffCanvas$).then();
-        // }
       }
     }
   }
 
   async renderCanvas(georaster: GeoRaster, corners, canvas = null) {
-    // const canvas = this.geotiffCanvas$.getValue() ?? document.createElement('canvas');
-
     if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
       this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module' });
       this.worker.onmessage = ({ data }) => {
-        // console.log('Creating image component');
-        // const image = document.createElement('img');
-        // console.log('Setting height');
-        // image.height = data.canvas.height;
-        // console.log('Setting width');
-        // image.width = data.canvas.width;
-        // console.log('Setting src');
-        // image.src = data.canvais.toDataURL('image/jpeg') //.getImageData(0, 0, c.canvas.width, c.canvas.height);
-        // console.log('Done setting src')
         const image = document.createElement('canvas');
         image.width = data.canvas.width;
         image.height = data.canvas.height;
         image.getContext('bitmaprenderer').transferFromImageBitmap(data.canvas);
         this.imageCanvas = image;
       };
-      console.log('Creating bitmap');
       const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
       this.worker.postMessage([bitmap, corners])
-      console.log('Renderizing canvas');
-      // const { canvas: renderizedCanvas } = await render(bitmap, corners);
     }
 
     if (canvas && this.imageCanvas) {
@@ -157,29 +107,31 @@ export class AppComponent implements OnInit {
   }
 
   calcCorners(map, imageryLayer, zoom: number = null) {
-    const topLeftBound = map.project(map.getBounds().getNorthWest());
+    const { x: mapStartX, y: mapStartY } = map.project(map.getBounds().getNorthWest());
     const projector = proj4(epsg_codes[imageryLayer.projection].proj4);
     const usedZoom = zoom ?? map.getZoom();
 
+    const { topLeft, topRight, bottomRight, bottomLeft } = imageryLayer.extent;
+
     const pxNW = map.project({
-      lng: projector.inverse(imageryLayer.extent.topLeft).x,
-      lat: projector.inverse(imageryLayer.extent.topLeft).y
+      lng: projector.inverse(topLeft).x,
+      lat: projector.inverse(topLeft).y
     }, usedZoom);
     const pxNE = map.project({
-      lng: projector.inverse(imageryLayer.extent.topRight).x,
-      lat: projector.inverse(imageryLayer.extent.topRight).y
+      lng: projector.inverse(topRight).x,
+      lat: projector.inverse(topRight).y
     }, usedZoom);
     const pxSE = map.project({
-      lng: projector.inverse(imageryLayer.extent.bottomRight).x,
-      lat: projector.inverse(imageryLayer.extent.bottomRight).y
+      lng: projector.inverse(bottomRight).x,
+      lat: projector.inverse(bottomRight).y
     }, usedZoom);
     const pxSW = map.project({
-      lng: projector.inverse(imageryLayer.extent.bottomLeft).x,
-      lat: projector.inverse(imageryLayer.extent.bottomLeft).y
+      lng: projector.inverse(bottomLeft).x,
+      lat: projector.inverse(bottomLeft).y
     }, usedZoom);
 
-    const topX = zoom ? 0 : topLeftBound.x;
-    const topY = zoom ? 0 : topLeftBound.y;
+    const topX = zoom ? 0 : mapStartX;
+    const topY = zoom ? 0 : mapStartY;
 
     const xNW = Math.ceil(pxNW.x - topX);
     const xNE = Math.ceil(pxNE.x - topX)

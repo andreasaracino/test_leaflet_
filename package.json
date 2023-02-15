@@ -38,6 +38,7 @@
     "@types/jasminewd2": "~2.0.3",
     "@types/leaflet": "^1.7.11",
     "@types/leaflet.markercluster": "~1.4.6",
+    "@types/proj4": "^2.5.2",
     "codelyzer": "~4.5.0",
     "@babel/core": "~7.12.10",
     "babel-loader": "~8.2.2",
