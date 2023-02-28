@@ -20,10 +20,11 @@ Marker.prototype.options.icon = iconDefault;
 
 import { AppComponent } from './app.component';
 import { HelloComponent } from './hello.component';
+import { LoaderComponent } from './loader/loader.component';
 
 @NgModule({
   imports:      [ BrowserModule, FormsModule ],
-  declarations: [ AppComponent, HelloComponent ],
+  declarations: [ AppComponent, HelloComponent, LoaderComponent ],
   bootstrap:    [ AppComponent ]
 })
 export class AppModule { }

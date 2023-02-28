@@ -1,14 +1,12 @@
 import {Component, OnInit} from '@angular/core';
 import * as L from 'leaflet';
 import {CanvasLayer} from 'leaflet-canvas-layer';
-import GeoRasterLayer, {GeoRaster, GeoRasterLayerOptions} from 'georaster-layer-for-leaflet';
+import GeoRasterLayer, {GeoRaster} from 'georaster-layer-for-leaflet';
 import parseGeoRaster from 'georaster';
 import {LatLngBounds, MapOptions} from "leaflet";
-import isUTM from "utm-utils/src/isUTM.js";
-import getProjString from "utm-utils/src/getProjString.js";
 import proj4 from 'proj4';
 import epsg_codes from 'epsg-index/all.json';
-import {BehaviorSubject, forkJoin, Observable, Subject} from "rxjs";
+import {BehaviorSubject} from "rxjs";
 import {getBordersFromCorners, toImageData} from "./image.util";
 import {combineLatest} from "rxjs";
 
@@ -18,7 +16,8 @@ import {combineLatest} from "rxjs";
   styleUrls: ['./app.component.css']
 })
 export class AppComponent implements OnInit {
-  readonly MAX_ZOOM = 20
+  loading = false;
+  readonly MAX_ZOOM = 16
   name = 'Angular';
   map: any;
   options: MapOptions = {
@@ -43,8 +42,9 @@ export class AppComponent implements OnInit {
       maxZoom: this.MAX_ZOOM
     }).addTo(this.map);
 
-    const createLayer = async (geotiffData$) => {
-      const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
+    const createLayer = async () => {
+      // this.loading = true;
+      const url = 'http://localhost:4200/assets/leaflet/5254D.tif';
 
       const response = await fetch(url);
       const bufferArray = await response.arrayBuffer();
@@ -60,7 +60,7 @@ export class AppComponent implements OnInit {
       });
 
       const imageBounds = imageryLayer.getBounds();
-      // this.map.fitBounds(imageBounds);
+      this.map.fitBounds(imageBounds);
       this.renderCanvas(georaster, this.calcCorners(this.map, imageryLayer, this.MAX_ZOOM));
 
       this.canvasDraw.prototype = new CanvasLayer();
@@ -68,7 +68,7 @@ export class AppComponent implements OnInit {
       this.map.addLayer(new this.canvasDraw(imageryLayer, this.renderCanvas, this.geotiffData$, this.calcCorners, this.map));
     };
 
-    createLayer(this.geotiffData$);
+    createLayer();
 
     combineLatest([this.geotiffData$, this.georaster$]).subscribe((results) => {
       const canvas = results[0]?.[0];
@@ -94,7 +94,6 @@ export class AppComponent implements OnInit {
     };
     this.onDrawLayer = function (viewInfo) {
       const canvas = viewInfo.canvas;
-      const ctx = canvas.getContext("2d");
 
       const corners = calcCorners(map, imageryLayer);
 
@@ -122,6 +121,7 @@ export class AppComponent implements OnInit {
 
   async renderCanvas(georaster: GeoRaster, corners, canvas = null) {
     // const canvas = this.geotiffCanvas$.getValue() ?? document.createElement('canvas');
+    this.loading = true;
 
     if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
       this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module' });
@@ -140,6 +140,8 @@ export class AppComponent implements OnInit {
         image.height = data.canvas.height;
         image.getContext('bitmaprenderer').transferFromImageBitmap(data.canvas);
         this.imageCanvas = image;
+        this.loading = false;
+        this.renderCanvas(this.georaster$.getValue(), this.geotiffData$.getValue()[1], this.geotiffData$.getValue()[0]);
       };
       console.log('Creating bitmap');
       const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
@@ -153,6 +155,7 @@ export class AppComponent implements OnInit {
       const scale = width / this.imageCanvas.width;
       canvas.getContext('2d').scale(scale, scale)
       canvas.getContext('2d').drawImage(this.imageCanvas, Math.min(corners[0].x, corners[3].x) / scale, Math.min(corners[0].y, corners[1].y) / scale)
+      this.loading = false;
     }
   }
 

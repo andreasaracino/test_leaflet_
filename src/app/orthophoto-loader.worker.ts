@@ -3,7 +3,6 @@
 import {getBordersFromCorners} from "./image.util";
 
 addEventListener('message', ({ data }) => {
-  console.log('cazoz e palle')
   const response = render(data[0], data[1]);
   postMessage(response);
 });
