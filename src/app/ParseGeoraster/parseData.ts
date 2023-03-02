@@ -1,22 +1,20 @@
-import {fromArrayBuffer} from 'geotiff';
 import {unflatten} from './utils';
 import {getDecoder} from 'geotiff/src/compression/index';
 import {getTileOrStrip} from "./tiff-chunk-loader.worker";
-import {GeoRaster} from "georaster-layer-for-leaflet";
 
-// return readRasters(image, data.data).then(rasters => {
-//   console.time('rasters unflatten')
-//   result.values = rasters.map(valuesInOneDimension => {
-//     return unflatten(valuesInOneDimension, {height, width});
-//   });
-//   console.timeEnd('rasters unflatten')
-//   // return processResult(result);
-//   return result;
-// });
+export async function getImageData({image, data, width, height}) {
+  return readRasters(image, data).then(rasters => {
+    const values = rasters.map(valuesInOneDimension => {
+      return unflatten(valuesInOneDimension, {width, height});
+    });
+    return values;
+  });
+}
 
 async function readRasters(image, arrayBuffer) {
+  // TODO SOSTITUISCI TUTTE LE FUNZIONI
   console.time('readRasters')
-  const imageWindow = [0, 0, image.getWidth(), image.getHeight()];
+  const imageWindow = [0, 0, image.fileDirectory.ImageWidth, image.fileDirectory.ImageLength];
   const samples = [];
 
   // check parameters
@@ -34,7 +32,7 @@ async function readRasters(image, arrayBuffer) {
 
   let valueArrays = [];
   for (let i = 0; i < samples.length; ++i) {
-    const valueArray = image.getArrayForSample(samples[i], numPixels);
+    const valueArray = getArrayForSample(image, samples[i], numPixels);
     valueArrays.push(valueArray);
   }
 
@@ -54,7 +52,7 @@ function sum(array, start, end) {
 
 async function _readRaster(image, imageWindow, samples, valueArrays, poolOrDecoder, arrayBuffer) {
   console.time('beginRaster')
-  const tileWidth = image.getTileWidth();
+  const tileWidth = image.fileDirectorygetTileWidth();
   const tileHeight = image.getTileHeight();
 
   const minXTile = Math.max(Math.floor(imageWindow[0] / tileWidth), 0);
@@ -139,4 +137,54 @@ export function decodeTile({promises, samples, bytesPerPixel, image, poolOrDecod
       }
     });
   }
+}
+
+function getSampleFormat(image, sampleIndex = 0) {
+  return image.fileDirectory.SampleFormat
+    ? image.fileDirectory.SampleFormat[sampleIndex] : 1;
+}
+function getBitsPerSample(image, sampleIndex = 0) {
+  return image.fileDirectory.BitsPerSample[sampleIndex];
+}
+function getArrayForSample(image, sampleIndex, size) {
+  const format = getSampleFormat(image, sampleIndex);
+  const bitsPerSample = getBitsPerSample(image, sampleIndex);
+  return arrayForType(format, bitsPerSample, size);
+}
+
+function arrayForType(format, bitsPerSample, size) {
+  switch (format) {
+    case 1: // unsigned integer data
+      if (bitsPerSample <= 8) {
+        return new Uint8Array(size);
+      } else if (bitsPerSample <= 16) {
+        return new Uint16Array(size);
+      } else if (bitsPerSample <= 32) {
+        return new Uint32Array(size);
+      }
+      break;
+    case 2: // twos complement signed integer data
+      if (bitsPerSample === 8) {
+        return new Int8Array(size);
+      } else if (bitsPerSample === 16) {
+        return new Int16Array(size);
+      } else if (bitsPerSample === 32) {
+        return new Int32Array(size);
+      }
+      break;
+    case 3: // floating point data
+      switch (bitsPerSample) {
+        case 16:
+        case 32:
+          return new Float32Array(size);
+        case 64:
+          return new Float64Array(size);
+        default:
+          break;
+      }
+      break;
+    default:
+      break;
+  }
+  throw Error('Unsupported data format/bitsPerSample');
 }

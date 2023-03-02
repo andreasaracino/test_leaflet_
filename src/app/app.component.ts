@@ -23,7 +23,7 @@ export class AppComponent implements OnInit {
 
   // geotiffCanvas$ = new BehaviorSubject<HTMLCanvasElement>(null);
   geotiffData$ = new BehaviorSubject<[HTMLCanvasElement, { x: number; y: number }]>(null);
-  georaster$ = new BehaviorSubject<GeoRaster>(null);
+  georaster$ = new BehaviorSubject<GeoRasterParsed>(null);
   imageCanvas: any = null;
   worker: Worker = null;
 
@@ -46,13 +46,12 @@ export class AppComponent implements OnInit {
       // console.timeEnd('download');
       this.loading = true
 
-      const georaster = await GeoRasterParsed.fromBuffer(bufferArray) as unknown as GeoRaster;
-
+      const georaster = await GeoRasterParsed.fromBuffer(bufferArray);
 
       this.georaster$.next(georaster);
 
       const imageryLayer = new GeoRasterLayer({
-        georaster,
+        georaster: georaster as unknown as GeoRaster,
         opacity: 1, 
         resolution: 256,
         resampleMethod: 'near',
@@ -106,7 +105,7 @@ export class AppComponent implements OnInit {
     }
   }
 
-  async renderCanvas(georaster: GeoRaster, corners, canvas = null) {
+  renderCanvas(georaster: GeoRasterParsed, corners, canvas = null) {
     this.loading = true;
 
     if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
@@ -120,8 +119,12 @@ export class AppComponent implements OnInit {
         this.loading = false;
         this.renderCanvas(this.georaster$.getValue(), this.geotiffData$.getValue()[1], this.geotiffData$.getValue()[0]);
       };
-      const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
-      this.worker.postMessage([bitmap, corners])
+      georaster.renderImage$().subscribe(async (res) => {
+        console.log(res);
+        // const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
+        const bitmap: ImageBitmap = await createImageBitmap(res);
+        this.worker.postMessage([bitmap, corners])
+      });
     }
 
     if (canvas && this.imageCanvas) {

@@ -27,8 +27,7 @@ Takes in a flattened one dimensional array
 representing two-dimensional pixel values
 and returns an array of arrays.
 */
-export function unflatten(valuesInOneDimension, size) {
-  const {height, width} = size;
+export function unflatten(valuesInOneDimension, {height, width}) {
   const valuesInTwoDimensions = [];
   for (let y = 0; y < height; y++) {
     const start = y * width;

@@ -4,11 +4,12 @@
 import {Observable} from "rxjs";
 import {fromArrayBuffer} from 'geotiff';
 import {GeoRaster} from "georaster-layer-for-leaflet";
+import {GeoRasterValues} from "georaster-layer-for-leaflet/dist/types";
 
 export class GeoRasterParsed {
   private _data: ArrayBuffer;
   private _worker: Worker;
-  values: undefined;
+  values: GeoRasterValues;
   width: number;
   height: number;
   pixelHeight: number;
@@ -21,6 +22,7 @@ export class GeoRasterParsed {
   noDataValue: number;
   numberOfRasters: number;
   palette: number;
+  image: any;
 
   private constructor(data) {
     this.initialize(data);
@@ -49,8 +51,6 @@ export class GeoRasterParsed {
   private async parseData() {
     return new Promise((resolve, reject) => {
       try {
-        let height, width;
-
         console.time('fromArrayBuffer')
         resolve(fromArrayBuffer(this._data).then(geotiff => {
           console.timeEnd('fromArrayBuffer')
@@ -58,6 +58,8 @@ export class GeoRasterParsed {
           return geotiff['getImage']().then(image => {
             console.timeEnd('getImage')
             try {
+              this.image = image;
+              this.image.source = null;
               const fileDirectory = image.fileDirectory;
 
               const {
@@ -67,8 +69,8 @@ export class GeoRasterParsed {
 
               this.projection = ProjectedCSTypeGeoKey || GeographicTypeGeoKey;
 
-              this.height = height = image.getHeight();
-              this.width = width = image.getWidth();
+              this.height = image.getHeight();
+              this.width = image.getWidth();
 
               const [resolutionX, resolutionY] = image.getResolution();
               this.pixelHeight = Math.abs(resolutionY);
@@ -76,9 +78,9 @@ export class GeoRasterParsed {
 
               const [originX, originY] = image.getOrigin();
               this.xmin = originX;
-              this.xmax = this.xmin + width * this.pixelWidth;
+              this.xmax = this.xmin + this.width * this.pixelWidth;
               this.ymax = originY;
-              this.ymin = this.ymax - height * this.pixelHeight;
+              this.ymin = this.ymax - this.height * this.pixelHeight;
 
               this.noDataValue = fileDirectory.GDAL_NODATA ? parseFloat(fileDirectory.GDAL_NODATA) : null;
 
@@ -106,13 +108,14 @@ export class GeoRasterParsed {
       this._worker = new Worker('./worker.ts',  { type: 'module' });
       this._worker.onmessage = (e) => {
         const data = e.data;
-        for (const key in data) {
-          this[key] = data[key];
-        }
+        this.values = data;
+        subscriber.next(new ImageData(data, this.width, this.height));
       };
+      const data = this._data;
+      const image = this.image;
       this._worker.postMessage({
-        data: this._data,
-      }, [this._data]);
+        noDataValue: this.noDataValue, image, data, values: this.values, width: this.width, height: this.height
+      }, [data]);
     });
   }
 }

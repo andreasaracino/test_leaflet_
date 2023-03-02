@@ -1,15 +1,10 @@
-// import parseData from './parseData';
+import {getImageData} from "./parseData";
 
 addEventListener('message', (e) => {
   const data = e.data;
-  // parseData(data).then(result => {
-  //   if (result._data instanceof ArrayBuffer) {
-  //     // @ts-ignore
-  //     postMessage(result, [result._data]);
-  //   } else {
-  //     // @ts-ignore
-  //     postMessage(result);
-  //   }
-  //   close();
-  // });
+  getImageData(data).then(result => {
+    // @ts-ignore
+    postMessage(result);
+    close();
+  });
 });

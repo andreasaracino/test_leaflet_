@@ -1,9 +1,8 @@
-export function toImageData(georaster, canvasWidth, canvasHeight) {
-  if (georaster.values) {
-    const {noDataValue, mins, ranges, values} = georaster;
+export function toImageData({noDataValue, values, width, height}, canvasWidth, canvasHeight) {
+  if (values) {
     const numBands = values.length;
-    const xRatio = georaster.width / canvasWidth;
-    const yRatio = georaster.height / canvasHeight;
+    const xRatio = width / canvasWidth;
+    const yRatio = height / canvasHeight;
     const data = new Uint8ClampedArray(canvasWidth * canvasHeight * 4);
     for (let rowIndex = 0; rowIndex < canvasHeight; rowIndex++) {
       for (let columnIndex = 0; columnIndex < canvasWidth; columnIndex++) {
@@ -19,14 +18,8 @@ export function toImageData(georaster, canvasWidth, canvasHeight) {
         const haveDataForAllBands = pixelValues.every(value => value !== undefined && value !== noDataValue);
         if (haveDataForAllBands) {
           const i = (rowIndex * (canvasWidth * 4)) + 4 * columnIndex;
-          if (numBands === 1) {
-            const pixelValue = Math.round(pixelValues[0]);
-            const scaledPixelValue = Math.round((pixelValue - mins[0]) / ranges[0] * 255);
-            data[i] = scaledPixelValue;
-            data[i + 1] = scaledPixelValue;
-            data[i + 2] = scaledPixelValue;
-            data[i + 3] = 255;
-          } else if (numBands === 3) {
+
+          if (numBands === 3) {
             try {
               const [r, g, b] = pixelValues;
               data[i] = r;
@@ -50,7 +43,7 @@ export function toImageData(georaster, canvasWidth, canvasHeight) {
         }
       }
     }
-    return new ImageData(data, canvasWidth, canvasHeight);
+    return data;
   }
 }
 
