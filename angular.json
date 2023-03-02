@@ -35,7 +35,7 @@
               "src/styles.css",
               "./node_modules/leaflet/dist/leaflet.css"
             ],
-            "scripts": ["src/app/tiff.min.js"],
+            "scripts": [],
             "webWorkerTsConfig": "tsconfig.worker.json"
           },
           "configurations": {

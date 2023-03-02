@@ -1,5 +1,3 @@
-import {toPublicName} from "@angular/compiler/src/i18n/serializers/xmb";
-
 export function toImageData(georaster, canvasWidth, canvasHeight) {
   if (georaster.values) {
     const {noDataValue, mins, ranges, values} = georaster;

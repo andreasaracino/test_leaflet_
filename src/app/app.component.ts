@@ -2,13 +2,13 @@ import {Component, OnInit} from '@angular/core';
 import * as L from 'leaflet';
 import {CanvasLayer} from 'leaflet-canvas-layer';
 import GeoRasterLayer, {GeoRaster} from 'georaster-layer-for-leaflet';
-import parseGeoRaster from 'georaster';
-import {LatLngBounds, MapOptions} from "leaflet";
 import proj4 from 'proj4';
 import epsg_codes from 'epsg-index/all.json';
 import {BehaviorSubject} from "rxjs";
 import {getBordersFromCorners, toImageData} from "./image.util";
 import {combineLatest} from "rxjs";
+import {GeoRasterParsed} from "./ParseGeoraster";
+import UTIF from 'utif';
 
 @Component({
   selector: 'my-app',
@@ -17,7 +17,7 @@ import {combineLatest} from "rxjs";
 })
 export class AppComponent implements OnInit {
   loading = false;
-  readonly MAX_ZOOM = 16
+  readonly MAX_ZOOM = 20
   name = 'Angular';
   map: any;
 
@@ -34,18 +34,25 @@ export class AppComponent implements OnInit {
       maxZoom: this.MAX_ZOOM
     }).addTo(this.map);
 
-    const createLayer = async () => {
-      const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
 
+    const createLayer = async () => {
+      // const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
+      const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
+
+      // console.time('download');
       const response = await fetch(url);
       const bufferArray = await response.arrayBuffer();
-      const georaster = await parseGeoRaster(bufferArray);
+
+      // console.timeEnd('download');
+      this.loading = true
+
+      const georaster = await new GeoRasterParsed(bufferArray, null, false).initialize(false) as GeoRaster;
 
       this.georaster$.next(georaster);
 
       const imageryLayer = new GeoRasterLayer({
         georaster,
-        opacity: 1,
+        opacity: 1, 
         resolution: 256,
         resampleMethod: 'near',
       });
@@ -59,7 +66,8 @@ export class AppComponent implements OnInit {
       this.map.addLayer(new this.canvasDraw(imageryLayer, this.renderCanvas, this.geotiffData$, this.calcCorners, this.map));
     };
 
-    createLayer().then();
+    createLayer().then((bufferArray) => {
+    });
 
     combineLatest([this.geotiffData$, this.georaster$]).subscribe((results) => {
       const canvas = results[0]?.[0];
@@ -82,6 +90,17 @@ export class AppComponent implements OnInit {
 
       if (this.map.getZoom() >= 12) {
         geotiffData$.next([canvas, corners]);
+        // const ctx = canvas.getContext('2d');
+
+        // ctx.beginPath();
+        //
+        // ctx.moveTo(corners[0].x, corners[0].y);
+        // ctx.lineTo(corners[1].x, corners[1].y);
+        // ctx.lineTo(corners[2].x, corners[2].y);
+        // ctx.lineTo(corners[3].x, corners[3].y);
+        // ctx.lineTo(corners[0].x, corners[0].y);
+        //
+        // ctx.fill();
       }
     }
   }

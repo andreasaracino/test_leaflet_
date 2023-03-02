@@ -8,7 +8,11 @@
   },
   "files": [
     "main.ts",
-    "polyfills.ts"
+    "polyfills.ts",
+    "app/ParseGeoraster/index.ts",
+    "app/ParseGeoraster/parseData.ts",
+    "app/ParseGeoraster/utils.ts",
+    "app/ParseGeoraster/worker.ts"
   ],
   "include": [
     "**/*.d.ts"
