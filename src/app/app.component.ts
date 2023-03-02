@@ -46,7 +46,8 @@ export class AppComponent implements OnInit {
       // console.timeEnd('download');
       this.loading = true
 
-      const georaster = await new GeoRasterParsed(bufferArray, null, false).initialize(false) as GeoRaster;
+      const georaster = await GeoRasterParsed.fromBuffer(bufferArray) as unknown as GeoRaster;
+
 
       this.georaster$.next(georaster);
 
@@ -91,7 +92,7 @@ export class AppComponent implements OnInit {
       if (this.map.getZoom() >= 12) {
         geotiffData$.next([canvas, corners]);
         // const ctx = canvas.getContext('2d');
-
+        //
         // ctx.beginPath();
         //
         // ctx.moveTo(corners[0].x, corners[0].y);

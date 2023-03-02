@@ -1,84 +1,130 @@
 'use strict';
 /* global Blob */
 /* global URL */
+import {Observable} from "rxjs";
+import {fromArrayBuffer} from 'geotiff';
+import {GeoRaster} from "georaster-layer-for-leaflet";
 
 export class GeoRasterParsed {
-  private readonly _web_worker_is_available: boolean;
-  private readonly _data: ArrayBuffer;
-  private readonly rasterType: string;
-  private readonly sourceType: string;
-  private _metadata: any;
+  private _data: ArrayBuffer;
+  private _worker: Worker;
+  values: undefined;
+  width: number;
+  height: number;
+  pixelHeight: number;
+  pixelWidth: number;
+  projection: number;
+  xmin: number;
+  xmax: number;
+  ymin: number;
+  ymax: number;
+  noDataValue: number;
+  numberOfRasters: number;
+  palette: number;
 
-  constructor(data, metadata, debug) {
-    if (debug) console.log('starting GeoRaster.constructor with', data, metadata);
-
-    this._web_worker_is_available = typeof window !== 'undefined' && typeof window.Worker !== 'undefined';
-
-    if (data instanceof ArrayBuffer) {
-      // this is browser
-      this._data = data;
-      this.rasterType = 'geotiff';
-      this.sourceType = 'ArrayBuffer';
-    }
-
-    if (debug) console.log('this after construction:', this);
+  private constructor(data) {
+    this.initialize(data);
   }
 
-  initialize(debug) {
-    return new Promise((resolve, reject) => {
-      if (debug) console.log('starting GeoRaster.initialize');
-      if (debug) console.log('this', this);
+  static async fromBuffer(data) {
+    const geoRaster = new GeoRasterParsed(data);
+    await geoRaster.parseData();
+    return geoRaster;
+  }
 
-      if (this.rasterType === 'object' || this.rasterType === 'geotiff' || this.rasterType === 'tiff') {
-        if (this._web_worker_is_available) {
-          const worker = new Worker('./worker.ts',  { type: 'module' });
-          worker.onmessage = (e) => {
-            if (debug) console.log('main thread received message:', e);
-            const data = e.data;
-            for (const key in data) {
-              this[key] = data[key];
+  private initialize(data) {
+    if (!(typeof window !== 'undefined' && typeof window.Worker !== 'undefined')) {
+      console.error('web worker is not available', new Error().stack);
+      return;
+    }
+
+    if (!(data instanceof ArrayBuffer)) {
+      console.error('unsupported data', new Error().stack);
+      return;
+    }
+
+    this._data = data;
+  }
+
+  private async parseData() {
+    return new Promise((resolve, reject) => {
+      try {
+        let height, width;
+
+        console.time('fromArrayBuffer')
+        resolve(fromArrayBuffer(this._data).then(geotiff => {
+          console.timeEnd('fromArrayBuffer')
+          console.time('getImage')
+          return geotiff['getImage']().then(image => {
+            console.timeEnd('getImage')
+            try {
+              const fileDirectory = image.fileDirectory;
+
+              const {
+                GeographicTypeGeoKey,
+                ProjectedCSTypeGeoKey,
+              } = image.getGeoKeys();
+
+              this.projection = ProjectedCSTypeGeoKey || GeographicTypeGeoKey;
+
+              this.height = height = image.getHeight();
+              this.width = width = image.getWidth();
+
+              const [resolutionX, resolutionY] = image.getResolution();
+              this.pixelHeight = Math.abs(resolutionY);
+              this.pixelWidth = Math.abs(resolutionX);
+
+              const [originX, originY] = image.getOrigin();
+              this.xmin = originX;
+              this.xmax = this.xmin + width * this.pixelWidth;
+              this.ymax = originY;
+              this.ymin = this.ymax - height * this.pixelHeight;
+
+              this.noDataValue = fileDirectory.GDAL_NODATA ? parseFloat(fileDirectory.GDAL_NODATA) : null;
+
+              this.numberOfRasters = fileDirectory.SamplesPerPixel;
+
+              // TODO (Take a look at this)
+              if (fileDirectory.ColorMap) {
+                // this.palette = getPalette(image);
+              }
+            } catch (error) {
+              reject(error);
+              console.error('[georaster] error parsing georaster:', error);
             }
-            resolve(this);
-          };
-          if (debug) console.log('about to postMessage');
-          if (this._data instanceof ArrayBuffer) {
-            worker.postMessage({
-              data: this._data,
-              rasterType: this.rasterType,
-              sourceType: this.sourceType,
-              metadata: this._metadata,
-            }, [this._data]);
-            // parseData({
-            //   data: this._data,
-            //   rasterType: this.rasterType,
-            //   sourceType: this.sourceType,
-            //   metadata: this._metadata,
-            // }).then(result => {
-            //   if (debug) console.log('result:', result);
-            //   resolve(result);
-            // }).catch(reject);
-          }
-        } else {
-          if (debug) console.log('web worker is not available');
-        //
-        }
-      } else {
-        reject('couldn\'t find a way to parse');
+          });
+        }));
+      } catch (error) {
+        reject(error);
+        console.error('[georaster] error parsing georaster:', error);
       }
+    });
+  }
+
+  renderImage$(): Observable<ImageData> {
+    return new Observable<ImageData>(subscriber => {
+      this._worker = new Worker('./worker.ts',  { type: 'module' });
+      this._worker.onmessage = (e) => {
+        const data = e.data;
+        for (const key in data) {
+          this[key] = data[key];
+        }
+      };
+      this._worker.postMessage({
+        data: this._data,
+      }, [this._data]);
     });
   }
 }
 
 
-export const parseGeoraster = (input, metadata, debug) => {
-  if (debug) console.log('starting parseGeoraster with ', input, metadata);
-
+export const parseGeoraster = async (input) => {
   if (input === undefined) {
     const errorMessage = '[Georaster.parseGeoraster] Error. You passed in undefined to parseGeoraster. We can\'t make a raster out of nothing!';
     throw Error(errorMessage);
   }
 
-  return new GeoRasterParsed(input, metadata, debug).initialize(debug);
+  return await GeoRasterParsed.fromBuffer(input);
 };
 
 /*

@@ -2,104 +2,17 @@ import {fromArrayBuffer} from 'geotiff';
 import {unflatten} from './utils';
 import {getDecoder} from 'geotiff/src/compression/index';
 import {getTileOrStrip} from "./tiff-chunk-loader.worker";
+import {GeoRaster} from "georaster-layer-for-leaflet";
 
-/* We're not using async because trying to avoid dependency on babel's polyfill
-There can be conflicts when GeoRaster is used in another project that is also
-using @babel/polyfill */
-export default function parseData(data): Promise<{ _data: any }> {
-  return new Promise((resolve, reject) => {
-    try {
-      const result = {
-        values: undefined,
-        width: undefined,
-        height: undefined,
-        pixelHeight: undefined,
-        pixelWidth: undefined,
-        projection: undefined,
-        xmin: undefined,
-        xmax: undefined,
-        ymin: undefined,
-        ymax: undefined,
-        noDataValue: undefined,
-        numberOfRasters: undefined,
-        _data: undefined,
-        palette: undefined
-      };
-
-      let height, width;
-
-      if (data.rasterType === 'geotiff') {
-        result._data = data.data;
-
-        // let initFunction = (a) => new Promise(() => {});
-        let initFunction = fromArrayBuffer;
-        // if (data.sourceType === 'url') {
-        //   initFunction = fromUrl;
-        // }
-
-        console.time('fromArrayBuffer')
-        resolve(initFunction(data.data).then(geotiff => {
-          console.timeEnd('fromArrayBuffer')
-          console.time('getImage')
-          return geotiff['getImage']().then(image => {
-            console.timeEnd('getImage')
-            try {
-              const fileDirectory = image.fileDirectory;
-
-              const {
-                GeographicTypeGeoKey,
-                ProjectedCSTypeGeoKey,
-              } = image.getGeoKeys();
-
-              result.projection = ProjectedCSTypeGeoKey || GeographicTypeGeoKey;
-
-              result.height = height = image.getHeight();
-              result.width = width = image.getWidth();
-
-              const [resolutionX, resolutionY] = image.getResolution();
-              result.pixelHeight = Math.abs(resolutionY);
-              result.pixelWidth = Math.abs(resolutionX);
-
-              const [originX, originY] = image.getOrigin();
-              result.xmin = originX;
-              result.xmax = result.xmin + width * result.pixelWidth;
-              result.ymax = originY;
-              result.ymin = result.ymax - height * result.pixelHeight;
-
-              result.noDataValue = fileDirectory.GDAL_NODATA ? parseFloat(fileDirectory.GDAL_NODATA) : null;
-
-              result.numberOfRasters = fileDirectory.SamplesPerPixel;
-
-              if (fileDirectory.ColorMap) {
-                // result.palette = getPalette(image);
-              }
-
-              if (data.sourceType !== 'url') {
-                return readRasters(image, data.data).then(rasters => {
-                  console.time('rasters unflatten')
-                  result.values = rasters.map(valuesInOneDimension => {
-                    return unflatten(valuesInOneDimension, {height, width});
-                  });
-                  console.timeEnd('rasters unflatten')
-                  // return processResult(result);
-                  return result;
-                });
-              } else {
-                return result;
-              }
-            } catch (error) {
-              reject(error);
-              console.error('[georaster] error parsing georaster:', error);
-            }
-          });
-        }));
-      }
-    } catch (error) {
-      reject(error);
-      console.error('[georaster] error parsing georaster:', error);
-    }
-  });
-}
+// return readRasters(image, data.data).then(rasters => {
+//   console.time('rasters unflatten')
+//   result.values = rasters.map(valuesInOneDimension => {
+//     return unflatten(valuesInOneDimension, {height, width});
+//   });
+//   console.timeEnd('rasters unflatten')
+//   // return processResult(result);
+//   return result;
+// });
 
 async function readRasters(image, arrayBuffer) {
   console.time('readRasters')
