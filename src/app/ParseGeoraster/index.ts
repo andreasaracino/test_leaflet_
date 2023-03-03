@@ -59,7 +59,6 @@ export class GeoRasterParsed {
             console.timeEnd('getImage')
             try {
               this.image = image;
-              this.image.source = null;
               const fileDirectory = image.fileDirectory;
 
               const {
@@ -110,11 +109,11 @@ export class GeoRasterParsed {
         const data = e.data;
         this.values = data;
         subscriber.next(new ImageData(data, this.width, this.height));
+        subscriber.complete();
       };
       const data = this._data;
-      const image = this.image;
       this._worker.postMessage({
-        noDataValue: this.noDataValue, image, data, values: this.values, width: this.width, height: this.height
+        noDataValue: this.noDataValue, data, width: this.width, height: this.height
       }, [data]);
     });
   }

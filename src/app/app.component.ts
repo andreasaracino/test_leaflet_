@@ -36,8 +36,8 @@ export class AppComponent implements OnInit {
 
 
     const createLayer = async () => {
-      // const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
-      const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
+      const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
+      // const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
 
       // console.time('download');
       const response = await fetch(url);

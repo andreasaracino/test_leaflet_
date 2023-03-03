@@ -1,20 +1,24 @@
 import {unflatten} from './utils';
 import {getDecoder} from 'geotiff/src/compression/index';
 import {getTileOrStrip} from "./tiff-chunk-loader.worker";
+import {fromArrayBuffer} from 'geotiff';
+import {toImageData} from "../image.util";
 
-export async function getImageData({image, data, width, height}) {
+export async function getImageData({noDataValue, data, width, height}) {
+  const geotiff = await fromArrayBuffer(data);
+  const image = await geotiff.getImage();
   return readRasters(image, data).then(rasters => {
     const values = rasters.map(valuesInOneDimension => {
       return unflatten(valuesInOneDimension, {width, height});
     });
-    return values;
+    return toImageData({noDataValue, values, width, height}, image.getWidth(), image.getHeight());
   });
 }
 
 async function readRasters(image, arrayBuffer) {
   // TODO SOSTITUISCI TUTTE LE FUNZIONI
   console.time('readRasters')
-  const imageWindow = [0, 0, image.fileDirectory.ImageWidth, image.fileDirectory.ImageLength];
+  const imageWindow = [0, 0, image.getWidth(), image.getHeight()];
   const samples = [];
 
   // check parameters
@@ -32,7 +36,7 @@ async function readRasters(image, arrayBuffer) {
 
   let valueArrays = [];
   for (let i = 0; i < samples.length; ++i) {
-    const valueArray = getArrayForSample(image, samples[i], numPixels);
+    const valueArray = image.getArrayForSample(samples[i], numPixels);
     valueArrays.push(valueArray);
   }
 
@@ -52,7 +56,7 @@ function sum(array, start, end) {
 
 async function _readRaster(image, imageWindow, samples, valueArrays, poolOrDecoder, arrayBuffer) {
   console.time('beginRaster')
-  const tileWidth = image.fileDirectorygetTileWidth();
+  const tileWidth = image.getTileWidth();
   const tileHeight = image.getTileHeight();
 
   const minXTile = Math.max(Math.floor(imageWindow[0] / tileWidth), 0);
@@ -91,7 +95,7 @@ async function _readRaster(image, imageWindow, samples, valueArrays, poolOrDecod
 
   // TODO
   for (let yTile = minYTile; yTile < maxYTile; yTile+=2) {
-    for (let xTile = minXTile; xTile < maxXTile; xTile+=2) {
+    for (let xTile = minXTile; xTile < maxXTile; xTile++) {
       decodeTile({promises, samples, bytesPerPixel, image, poolOrDecoder, xTile, yTile, arrayBuffer, tileWidth, tileHeight, sampleReaders, imageWindow, srcSampleOffsets, littleEndian, valueArrays, windowWidth})
     }
   }
@@ -137,54 +141,4 @@ export function decodeTile({promises, samples, bytesPerPixel, image, poolOrDecod
       }
     });
   }
-}
-
-function getSampleFormat(image, sampleIndex = 0) {
-  return image.fileDirectory.SampleFormat
-    ? image.fileDirectory.SampleFormat[sampleIndex] : 1;
-}
-function getBitsPerSample(image, sampleIndex = 0) {
-  return image.fileDirectory.BitsPerSample[sampleIndex];
-}
-function getArrayForSample(image, sampleIndex, size) {
-  const format = getSampleFormat(image, sampleIndex);
-  const bitsPerSample = getBitsPerSample(image, sampleIndex);
-  return arrayForType(format, bitsPerSample, size);
-}
-
-function arrayForType(format, bitsPerSample, size) {
-  switch (format) {
-    case 1: // unsigned integer data
-      if (bitsPerSample <= 8) {
-        return new Uint8Array(size);
-      } else if (bitsPerSample <= 16) {
-        return new Uint16Array(size);
-      } else if (bitsPerSample <= 32) {
-        return new Uint32Array(size);
-      }
-      break;
-    case 2: // twos complement signed integer data
-      if (bitsPerSample === 8) {
-        return new Int8Array(size);
-      } else if (bitsPerSample === 16) {
-        return new Int16Array(size);
-      } else if (bitsPerSample === 32) {
-        return new Int32Array(size);
-      }
-      break;
-    case 3: // floating point data
-      switch (bitsPerSample) {
-        case 16:
-        case 32:
-          return new Float32Array(size);
-        case 64:
-          return new Float64Array(size);
-        default:
-          break;
-      }
-      break;
-    default:
-      break;
-  }
-  throw Error('Unsupported data format/bitsPerSample');
 }
