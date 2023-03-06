@@ -4,14 +4,14 @@ import {getTileOrStrip} from "./tiff-chunk-loader.worker";
 import {fromArrayBuffer} from 'geotiff';
 import {toImageData} from "../image.util";
 
-export async function getImageData({noDataValue, data, width, height}) {
+export async function getImageData({noDataValue, data, width, height, canvasWidth, canvasHeight}) {
   const geotiff = await fromArrayBuffer(data);
   const image = await geotiff.getImage();
   return readRasters(image, data).then(rasters => {
     const values = rasters.map(valuesInOneDimension => {
       return unflatten(valuesInOneDimension, {width, height});
     });
-    return toImageData({noDataValue, values, width, height}, image.getWidth(), image.getHeight());
+    return toImageData({noDataValue, values, width, height}, canvasWidth, canvasHeight);
   });
 }
 
@@ -87,16 +87,13 @@ async function _readRaster(image, imageWindow, samples, valueArrays, poolOrDecod
   }
   console.timeEnd('first for cycle')
 
-  const promises = [];
   const {littleEndian} = image;
   console.time('inner for')
-  let itersDone = 0;
-  const maxIters = (maxXTile - minXTile) * (maxYTile - minYTile);
 
   // TODO
-  for (let yTile = minYTile; yTile < maxYTile; yTile+=2) {
+  for (let yTile = minYTile; yTile < maxYTile; yTile++) {
     for (let xTile = minXTile; xTile < maxXTile; xTile++) {
-      decodeTile({promises, samples, bytesPerPixel, image, poolOrDecoder, xTile, yTile, arrayBuffer, tileWidth, tileHeight, sampleReaders, imageWindow, srcSampleOffsets, littleEndian, valueArrays, windowWidth})
+      decodeTile({samples, bytesPerPixel, image, poolOrDecoder, xTile, yTile, arrayBuffer, tileWidth, tileHeight, sampleReaders, imageWindow, srcSampleOffsets, littleEndian, valueArrays, windowWidth})
     }
   }
 
@@ -109,7 +106,7 @@ async function _readRaster(image, imageWindow, samples, valueArrays, poolOrDecod
 
   return valueArrays;
 }
-export function decodeTile({promises, samples, bytesPerPixel, image, poolOrDecoder, xTile, yTile, arrayBuffer, tileWidth, tileHeight, sampleReaders, imageWindow, srcSampleOffsets, littleEndian, valueArrays, windowWidth}) {
+export function decodeTile({samples, bytesPerPixel, image, poolOrDecoder, xTile, yTile, arrayBuffer, tileWidth, tileHeight, sampleReaders, imageWindow, srcSampleOffsets, littleEndian, valueArrays, windowWidth}) {
   for (let si = 0; si < samples.length; si++) {
     const sample = samples[si];
     if (image.planarConfiguration === 2) {

@@ -5,10 +5,9 @@ import GeoRasterLayer, {GeoRaster} from 'georaster-layer-for-leaflet';
 import proj4 from 'proj4';
 import epsg_codes from 'epsg-index/all.json';
 import {BehaviorSubject} from "rxjs";
-import {getBordersFromCorners, toImageData} from "./image.util";
+import {getBordersFromCorners} from "./image.util";
 import {combineLatest} from "rxjs";
 import {GeoRasterParsed} from "./ParseGeoraster";
-import UTIF from 'utif';
 
 @Component({
   selector: 'my-app',
@@ -66,8 +65,7 @@ export class AppComponent implements OnInit {
       this.map.addLayer(new this.canvasDraw(imageryLayer, this.renderCanvas, this.geotiffData$, this.calcCorners, this.map));
     };
 
-    createLayer().then((bufferArray) => {
-    });
+    createLayer()
 
     combineLatest([this.geotiffData$, this.georaster$]).subscribe((results) => {
       const canvas = results[0]?.[0];
@@ -119,7 +117,7 @@ export class AppComponent implements OnInit {
         this.loading = false;
         this.renderCanvas(this.georaster$.getValue(), this.geotiffData$.getValue()[1], this.geotiffData$.getValue()[0]);
       };
-      georaster.renderImage$().subscribe(async (res) => {
+      georaster.renderImage$(Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)).subscribe(async (res) => {
         console.log(res);
         // const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
         const bitmap: ImageBitmap = await createImageBitmap(res);

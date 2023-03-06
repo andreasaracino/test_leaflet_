@@ -3,7 +3,6 @@
 /* global URL */
 import {Observable} from "rxjs";
 import {fromArrayBuffer} from 'geotiff';
-import {GeoRaster} from "georaster-layer-for-leaflet";
 import {GeoRasterValues} from "georaster-layer-for-leaflet/dist/types";
 
 export class GeoRasterParsed {
@@ -102,18 +101,18 @@ export class GeoRasterParsed {
     });
   }
 
-  renderImage$(): Observable<ImageData> {
+  renderImage$(canvasWidth: number, canvasHeight: number): Observable<ImageData> {
     return new Observable<ImageData>(subscriber => {
       this._worker = new Worker('./worker.ts',  { type: 'module' });
       this._worker.onmessage = (e) => {
         const data = e.data;
         this.values = data;
-        subscriber.next(new ImageData(data, this.width, this.height));
+        subscriber.next(new ImageData(data, canvasWidth, canvasHeight));
         subscriber.complete();
       };
       const data = this._data;
       this._worker.postMessage({
-        noDataValue: this.noDataValue, data, width: this.width, height: this.height
+        noDataValue: this.noDataValue, data, width: this.width, height: this.height, canvasWidth, canvasHeight
       }, [data]);
     });
   }

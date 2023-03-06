@@ -13,6 +13,7 @@ export function toImageData({noDataValue, values, width, height}, canvasWidth, c
             return band[rasterRowIndex][rasterColumnIndex];
           } catch (error) {
             console.error(error);
+            return;
           }
         });
         const haveDataForAllBands = pixelValues.every(value => value !== undefined && value !== noDataValue);
