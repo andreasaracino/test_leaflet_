@@ -109,16 +109,18 @@ export class AppComponent implements OnInit {
     if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
       this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module' });
       this.worker.onmessage = ({ data }) => {
-        const image = document.createElement('canvas');
-        image.width = data.canvas.width;
-        image.height = data.canvas.height;
-        image.getContext('bitmaprenderer').transferFromImageBitmap(data.canvas);
-        this.imageCanvas = image;
+        if (!this.imageCanvas) {
+          const image = document.createElement('canvas');
+          image.width = data.canvas.width;
+          image.height = data.canvas.height;
+          this.imageCanvas = image;
+        }
+        this.imageCanvas.getContext('bitmaprenderer').transferFromImageBitmap(data.canvas);
         this.loading = false;
         this.renderCanvas(this.georaster$.getValue(), this.geotiffData$.getValue()[1], this.geotiffData$.getValue()[0]);
       };
       georaster.renderImage$(Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)).subscribe(async (res) => {
-        console.log(res);
+        // console.log(res);
         // const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
         const bitmap: ImageBitmap = await createImageBitmap(res);
         this.worker.postMessage([bitmap, corners])
