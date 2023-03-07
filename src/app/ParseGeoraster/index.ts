@@ -103,12 +103,15 @@ export class GeoRasterParsed {
 
   renderImage$(canvasWidth: number, canvasHeight: number): Observable<ImageData> {
     return new Observable<ImageData>(subscriber => {
-      this._worker = new Worker('./worker.ts',  { type: 'module' });
+      let a = 0;
+      this._worker = new Worker('./worker.ts',  { type: 'module', name: 'worker-tile-loader' });
       this._worker.onmessage = (e) => {
         const data = e.data;
         this.values = data;
-        subscriber.next(new ImageData(data, canvasWidth, canvasHeight));
-        subscriber.complete();
+        subscriber.next(new ImageData(data.image, canvasWidth, canvasHeight));
+        if (data.tiles === data.finish) {
+          subscriber.complete();
+        }
       };
       const data = this._data;
       this._worker.postMessage({

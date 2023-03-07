@@ -35,8 +35,8 @@ export class AppComponent implements OnInit {
 
 
     const createLayer = async () => {
-      const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
-      // const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
+      // const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
+      const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
 
       // console.time('download');
       const response = await fetch(url);
@@ -107,7 +107,7 @@ export class AppComponent implements OnInit {
     this.loading = true;
 
     if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
-      this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module' });
+      this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module', name: 'worker-projector' });
       this.worker.onmessage = ({ data }) => {
         if (!this.imageCanvas) {
           const image = document.createElement('canvas');
@@ -128,10 +128,13 @@ export class AppComponent implements OnInit {
     }
 
     if (canvas && this.imageCanvas) {
-      const { width } = getBordersFromCorners(corners);
-      const scale = width / this.imageCanvas.width;
-      canvas.getContext('2d').scale(scale, scale)
-      canvas.getContext('2d').drawImage(this.imageCanvas, Math.min(corners[0].x, corners[3].x) / scale, Math.min(corners[0].y, corners[1].y) / scale)
+      const { width, height } = getBordersFromCorners(corners);
+      const scaleX = width / this.imageCanvas.width;
+      const scaleY = height / this.imageCanvas.height;
+      // canvas.getContext('2d').restore();
+      canvas.getContext('2d').setTransform(scaleX,0,0,scaleY,0,0)
+      // canvas.getContext('2d').scale(scaleX, scaleY)
+      canvas.getContext('2d').drawImage(this.imageCanvas, Math.min(corners[0].x, corners[3].x) / scaleX, Math.min(corners[0].y, corners[1].y) / scaleY)
       this.loading = false;
     }
   }
