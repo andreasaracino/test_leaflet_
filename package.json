@@ -21,6 +21,8 @@
     "@angular/platform-browser": "~11.1.1",
     "@angular/platform-browser-dynamic": "~11.1.1",
     "@angular/router": "~11.1.1",
+    "canvas": "^2.11.0",
+    "canvas-arbitrary-quads": "^1.0.0",
     "core-js": "2.6.9",
     "epsg-index": "^1.2.0",
     "georaster": "^1.5.6",

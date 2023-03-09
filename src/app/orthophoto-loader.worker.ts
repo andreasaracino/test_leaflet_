@@ -3,12 +3,13 @@
 import {getBordersFromCorners} from "./image.util";
 
 addEventListener('message', ({ data }) => {
-  const response = render(data[0], data[1]);
-  postMessage(response);
+  // const response = render(data[0], data[1]);
+  // postMessage(response);
 });
 
-function render(img: ImageBitmap, corners, step = 32) {
+function render(img: ImageBitmap, corners) {
   const { borders, width, height } = normalizedCorners(corners);
+  const step = Math.floor(img.width / width) + 1
   const canvas: OffscreenCanvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d');
   let p1, p2, p3, p4, y1c, y2c, y1n, y2n,
@@ -40,7 +41,7 @@ function render(img: ImageBitmap, corners, step = 32) {
   return { borders, canvas: canvas.transferToImageBitmap(), width, height };
 }
 
-function normalizedCorners(corners) {
+export function normalizedCorners(corners) {
   const {
     leftBorder,
     bottomBorder,

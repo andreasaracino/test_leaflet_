@@ -8,6 +8,9 @@ import {BehaviorSubject} from "rxjs";
 import {getBordersFromCorners} from "./image.util";
 import {combineLatest} from "rxjs";
 import {GeoRasterParsed} from "./ParseGeoraster";
+import {Image, loadImage} from 'canvas';
+import {normalizedCorners} from "./orthophoto-loader.worker";
+import { drawArbitraryQuadImage, FILL_METHOD } from 'canvas-arbitrary-quads';
 
 @Component({
   selector: 'my-app',
