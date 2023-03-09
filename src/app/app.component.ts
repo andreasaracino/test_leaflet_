@@ -8,6 +8,9 @@ import {BehaviorSubject} from "rxjs";
 import {getBordersFromCorners} from "./image.util";
 import {combineLatest} from "rxjs";
 import {GeoRasterParsed} from "./ParseGeoraster";
+import {Image, loadImage} from 'canvas';
+import {normalizedCorners} from "./orthophoto-loader.worker";
+import { drawArbitraryQuadImage, FILL_METHOD } from 'canvas-arbitrary-quads';
 
 @Component({
   selector: 'my-app',
@@ -16,14 +19,15 @@ import {GeoRasterParsed} from "./ParseGeoraster";
 })
 export class AppComponent implements OnInit {
   loading = false;
-  readonly MAX_ZOOM = 20
+  readonly MAX_ZOOM = 22
   name = 'Angular';
   map: any;
+  image: Image;
 
   // geotiffCanvas$ = new BehaviorSubject<HTMLCanvasElement>(null);
   geotiffData$ = new BehaviorSubject<[HTMLCanvasElement, { x: number; y: number }]>(null);
   georaster$ = new BehaviorSubject<GeoRasterParsed>(null);
-  imageCanvas: any = null;
+  imageCanvas: Record<number, HTMLCanvasElement> = {};
   worker: Worker = null;
 
   ngOnInit() {
@@ -37,12 +41,11 @@ export class AppComponent implements OnInit {
     const createLayer = async () => {
       const url = 'http://localhost:4200/assets/leaflet/orthophoto.tif';
       // const url = 'http://localhost:4200/assets/leaflet/odm_orthophoto (1).tif';
+      // const url = 'http://localhost:4200/assets/leaflet/5254D.tif';
 
-      // console.time('download');
       const response = await fetch(url);
       const bufferArray = await response.arrayBuffer();
 
-      // console.timeEnd('download');
       this.loading = true
 
       const georaster = await GeoRasterParsed.fromBuffer(bufferArray);
@@ -62,7 +65,7 @@ export class AppComponent implements OnInit {
 
       this.canvasDraw.prototype = new CanvasLayer();
 
-      this.map.addLayer(new this.canvasDraw(imageryLayer, this.renderCanvas, this.geotiffData$, this.calcCorners, this.map));
+      this.map.addLayer(new this.canvasDraw(imageryLayer, this.geotiffData$, this.calcCorners, this.map));
     };
 
     createLayer()
@@ -78,62 +81,78 @@ export class AppComponent implements OnInit {
     });
   }
 
-  canvasDraw = function (imageryLayer, renderFunction, geotiffData$, calcCorners, map) {
+  canvasDraw = function (imageryLayer, geotiffData$, calcCorners, map) {
     this.setData = function () {
       this.needRedraw();
     };
     this.onDrawLayer = function (viewInfo) {
-      const canvas = viewInfo.canvas;
-      const corners = calcCorners(map, imageryLayer);
-
       if (this.map.getZoom() >= 12) {
+        const canvas = viewInfo.canvas;
+        const corners = calcCorners(map, imageryLayer);
         geotiffData$.next([canvas, corners]);
-        // const ctx = canvas.getContext('2d');
-        //
-        // ctx.beginPath();
-        //
-        // ctx.moveTo(corners[0].x, corners[0].y);
-        // ctx.lineTo(corners[1].x, corners[1].y);
-        // ctx.lineTo(corners[2].x, corners[2].y);
-        // ctx.lineTo(corners[3].x, corners[3].y);
-        // ctx.lineTo(corners[0].x, corners[0].y);
-        //
-        // ctx.fill();
       }
     }
   }
 
-  renderCanvas(georaster: GeoRasterParsed, corners, canvas = null) {
-    this.loading = true;
+  renderCanvas(georaster: GeoRasterParsed, corners, canvas: HTMLCanvasElement = null) {
+    const currentZoom = this.map.getZoom();
 
-    if (!this.imageCanvas && typeof Worker !== 'undefined' && !this.worker) {
-      this.worker = new Worker('./orthophoto-loader.worker',  { type: 'module' });
-      this.worker.onmessage = ({ data }) => {
-        if (!this.imageCanvas) {
-          const image = document.createElement('canvas');
-          image.width = data.canvas.width;
-          image.height = data.canvas.height;
-          this.imageCanvas = image;
-        }
-        this.imageCanvas.getContext('bitmaprenderer').transferFromImageBitmap(data.canvas);
-        this.loading = false;
-        this.renderCanvas(this.georaster$.getValue(), this.geotiffData$.getValue()[1], this.geotiffData$.getValue()[0]);
-      };
-      georaster.renderImage$(Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)).subscribe(async (res) => {
-        // console.log(res);
-        // const bitmap: ImageBitmap = await createImageBitmap(toImageData(georaster, Math.abs(corners[1].x - corners[0].x), Math.abs(corners[0].y - corners[3].y)));
-        const bitmap: ImageBitmap = await createImageBitmap(res);
-        this.worker.postMessage([bitmap, corners])
+    if (!this.imageCanvas[currentZoom]) {
+      this.transformImage(corners, currentZoom)
+    }
+
+    if (canvas) {
+      this.renderImage(canvas, corners, currentZoom);
+    }
+  }
+
+  renderImage(canvas, corners, currentZoom) {
+    let canvasToRender;
+
+    if (this.imageCanvas[currentZoom]) {
+      canvasToRender = this.imageCanvas[currentZoom];
+    } else {
+      const index = Object.keys(this.imageCanvas).reduce((a, b) => {
+        return Math.abs(Number(b) - currentZoom) < Math.abs(Number(a) - currentZoom) ? b : a;
       });
-    }
 
-    if (canvas && this.imageCanvas) {
-      const { width } = getBordersFromCorners(corners);
-      const scale = width / this.imageCanvas.width;
-      canvas.getContext('2d').scale(scale, scale)
-      canvas.getContext('2d').drawImage(this.imageCanvas, Math.min(corners[0].x, corners[3].x) / scale, Math.min(corners[0].y, corners[1].y) / scale)
-      this.loading = false;
+      canvasToRender = this.imageCanvas[index];
     }
+    const { width } = getBordersFromCorners(corners);
+    const scale = width / canvasToRender.width;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    canvas.getContext('2d').setTransform(scale, 0, 0, scale, 0, 0);
+    canvas.getContext('2d').drawImage(canvasToRender, Math.min(corners[0].x, corners[3].x) / scale, Math.min(corners[0].y, corners[1].y) / scale)
+  }
+
+  async transformImage(corners, currentZoom) {
+    this.loading = true;
+    const {borders, width, height} = normalizedCorners(corners);
+    const newCanvas = document.createElement('canvas');
+    newCanvas.width = width;
+    newCanvas.height = height;
+    this.imageCanvas[currentZoom] = newCanvas;
+
+    if (!this.image) {
+      this.image = await loadImage('http://localhost:4200/assets/leaflet/orthophoto.png');
+    }
+    const ctx = newCanvas.getContext('2d');
+
+    const dstPoints = [
+      borders[0],
+      borders[3],
+      borders[2],
+      borders[1],
+    ];
+    const srcPoints = [
+      {x: 0, y: 0},     // UL
+      {x: 0, y: this.image.height},   // BL
+      {x: this.image.width, y: this.image.height}, // BR
+      {x: this.image.width, y: 0},   // UR
+    ];
+    drawArbitraryQuadImage(ctx, this.image, srcPoints, dstPoints, FILL_METHOD.BILINEAR);
+    this.renderImage(this.geotiffData$.getValue()[0], this.geotiffData$.getValue()[1], currentZoom);
+    this.loading = false;
   }
 
   calcCorners(map, imageryLayer, zoom: number = null) {
